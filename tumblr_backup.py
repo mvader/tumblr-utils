@@ -57,9 +57,11 @@ except locale.Error:
 encoding = 'utf-8'
 time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
-def log(s):
+def log(account, s):
     if not options.quiet:
-        sys.stdout.write(s)
+        if account:
+            sys.stdout.write('%s: ' % account)
+        sys.stdout.write(s[:-1] + ' ' * 20 + s[-1:])
         sys.stdout.flush()
 
 def mkdir(dir, recursive=False):
@@ -117,7 +119,7 @@ def xmlparse(url, data=None):
     return doc if doc._name == 'tumblr' else None
 
 def save_image(image_url, post_id):
-    """saves an image if not saved yet"""
+    """saves an image if not saved yet, returns the local file name"""
     image_filename = post_id + '_' + image_url.split('/')[-1].replace('tumblr_', '')
     glob_filter = '' if '.' in image_filename else '.*'
     # check if a file with this name already exists
@@ -125,7 +127,11 @@ def save_image(image_url, post_id):
     if image_glob:
         return os.path.split(image_glob[0])[1]
     # download the image data
-    image_response = urllib2.urlopen(image_url)
+    try:
+        image_response = urllib2.urlopen(image_url)
+    except urllib2.HTTPError:
+        # return the original URL
+        return image_url
     image_data = image_response.read()
     image_response.close()
     # determine the file type if it's unknown
@@ -270,12 +276,13 @@ class TumblrBackup:
                     long(os.path.splitext(os.path.split(f)[1])[0])
                     for f in glob(join(post_folder, '*' + post_ext))
                 )
-                log('Backing up posts after %d\n' % ident_max)
+                log(account, "Backing up posts after %d\r" % ident_max)
             except ValueError:  # max() arg is an empty sequence
                 pass
+        else:
+            log(account, "Getting basic information\r")
 
         # start by calling the API with just a single post
-        log("Getting basic information\r")
         soup = xmlparse(base + '?num=1')
         if not soup:
             return
@@ -319,7 +326,7 @@ class TumblrBackup:
         for i in range(options.skip, last_post, MAX):
             # find the upper bound
             j = min(i + MAX, last_post)
-            log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
+            log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, total_posts))
 
             soup = xmlparse('%s?num=%d&start=%d' % (base, j - i, i))
             if soup is None:
@@ -336,7 +343,7 @@ class TumblrBackup:
             self.build_index()
             self.save_index()
 
-        log("%s: %d posts backed up" % (account, self.post_count) + 50 * ' ' + '\n')
+        log(account, "%d posts backed up\n" % self.post_count)
         self.total_count += self.post_count
 
 
@@ -393,8 +400,10 @@ class TumblrPost:
             append_try('photo-caption')
 
         elif self.typ == 'link':
-            url = escape(unicode(post['link-url']))
-            self.title = u'<a href="%s">%s</a>' % (url, post['link-text'])
+            url = unicode(post['link-url'])
+            self.title = u'<a href="%s">%s</a>' % (escape(url),
+                post['link-text'] if 'link-text' in post else url
+            )
             append_try('link-description')
 
         elif self.typ == 'quote':
@@ -439,7 +448,10 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url):
-        return u'../%s/%s' % (post_dir, save_image(url, self.ident))
+        url = save_image(url, self.ident)
+        if '://' in url:        # in case of download errors
+            return url
+        return u'../%s/%s' % (post_dir, url)
 
     def get_post(self):
         """returns this post in HTML"""
