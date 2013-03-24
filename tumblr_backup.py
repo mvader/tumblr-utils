@@ -32,12 +32,13 @@ imghdr.tests.append(test_jpg)
 
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
-post_folder = ''
+image_folder = ''
 
 # constant names
 root_folder = os.getcwdu()
 post_dir = 'posts'
 xml_dir = 'xml'
+image_dir = 'images'
 archive_dir = 'archive'
 theme_dir = 'theme'
 backup_css = 'backup.css'
@@ -120,10 +121,12 @@ def xmlparse(url, data=None):
 
 def save_image(image_url, post_id):
     """saves an image if not saved yet, returns the local file name"""
-    image_filename = post_id + '_' + image_url.split('/')[-1].replace('tumblr_', '')
+    image_filename = image_url.split('/')[-1]
+    if options.samedir:
+        image_filename = post_id + '_' + image_filename.replace('tumblr_', '')
     glob_filter = '' if '.' in image_filename else '.*'
     # check if a file with this name already exists
-    image_glob = glob(join(post_folder, image_filename + glob_filter))
+    image_glob = glob(join(image_folder, image_filename + glob_filter))
     if image_glob:
         return os.path.split(image_glob[0])[1]
     # download the image data
@@ -140,7 +143,8 @@ def save_image(image_url, post_id):
         if image_type:
             image_filename += '.' + image_type.replace('jpeg', 'jpg')
     # save the image
-    with open(join(post_folder, image_filename), 'wb') as image_file:
+    mkdir(image_folder)
+    with open(join(image_folder, image_filename), 'wb') as image_file:
         image_file.write(image_data)
     return image_filename
 
@@ -241,19 +245,20 @@ class TumblrBackup:
         base = get_api_url(account)
 
         # make sure there are folders to save in
-        global save_folder, post_folder, post_ext, post_dir, have_custom_css
+        global save_folder, image_folder, image_dir, post_ext, post_dir, have_custom_css
         if options.blosxom:
             save_folder = root_folder
             post_ext = '.txt'
-            post_folder = post_dir = os.curdir
+            post_dir = os.curdir
             post_class = BlosxomPost
         else:
             save_folder = join(root_folder, account)
-            post_folder = join(save_folder, post_dir)
+            if options.samedir:
+                image_dir = post_dir
+            image_folder = path_to(image_dir)
             post_class = TumblrPost
             have_custom_css = os.access(path_to(custom_css), os.R_OK)
         mkdir(save_folder, True)
-        mkdir(post_folder)
 
         self.post_count = 0
 
@@ -274,7 +279,7 @@ class TumblrBackup:
             try:
                 ident_max = max(
                     long(os.path.splitext(os.path.split(f)[1])[0])
-                    for f in glob(join(post_folder, '*' + post_ext))
+                    for f in glob(path_to(post_dir, '*' + post_ext))
                 )
                 log(account, "Backing up posts after %d\r" % ident_max)
             except ValueError:  # max() arg is an empty sequence
@@ -451,7 +456,7 @@ class TumblrPost:
         url = save_image(url, self.ident)
         if '://' in url:        # in case of download errors
             return url
-        return u'../%s/%s' % (post_dir, url)
+        return u'../%s/%s' % (image_dir, url)
 
     def get_post(self):
         """returns this post in HTML"""
@@ -546,6 +551,9 @@ if __name__ == '__main__':
     )
     parser.add_option('-P', '--private', help="password for a private tumblr",
         metavar='PASSWORD'
+    )
+    parser.add_option('-S', '--samedir', action='store_true',
+        help="store images in the posts folder"
     )
     options, args = parser.parse_args()
 

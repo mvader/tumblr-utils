@@ -60,6 +60,7 @@ page](http://drbeat.li/tumblr).
                             YYYY-MM-DD: the given day
     -P PASSWORD, --private=PASSWORD
                           password to a private tumblr
+    -S, --samedir         store images in the posts folder
 
 ### Arguments
 
@@ -148,6 +149,10 @@ plugin](http://www.blosxom.com/plugins/meta/meta.htm). Images are not
 downloaded; instead, the image links point back to the original image on
 Tumblr. The posts are saved in the current folder with a `.txt` extension.
 The index is not updated.
+
+With option `-S`, images are stored in the same folder as the posts themselves.
+The image file name is prefixed with the post id. This makes it easier to
+associate the posts and the images.
 
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select
